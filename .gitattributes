@@ -1,0 +1,4 @@
+go.sum linguist-generated=true
+
+internal/qsert/expr_parser.go linguist-generated=true
+internal/qsert/insert_parser.go linguist-generated=true

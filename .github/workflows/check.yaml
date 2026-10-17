@@ -1,0 +1,50 @@
+name: check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/check.yaml'
+      - '.golangci.yml'
+      - 'cmd/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'internal/**'
+  pull_request:
+    paths:
+      - '.github/workflows/check.yaml'
+      - '.golangci.yml'
+      - 'cmd/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'internal/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test -race ./...
