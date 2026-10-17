@@ -488,20 +488,32 @@ func TestParseSelectors(t *testing.T) {
 		want []Selector
 		err  bool
 	}{
-		{in: ".a", want: []Selector{{"", "a", nil, "a"}}},
+		{in: ".a", want: []Selector{{"", "a", nil, "a", ""}}},
 		{in: " .Id , .Users.Name,.db.t.c ", want: []Selector{
-			{"", "id", nil, "Id"}, {"users", "name", nil, "Users.Name"}, {"db.t", "c", nil, "db.t.c"},
+			{"", "id", nil, "Id", ""}, {"users", "name", nil, "Users.Name", ""}, {"db.t", "c", nil, "db.t.c", ""},
 		}},
 		{in: `."a b".` + "`c``d`" + `, ."x""y", .列`, want: []Selector{
-			{"a b", "c`d", nil, `"a b"."c` + "`" + `d"`}, {"", `x"y`, nil, `"x""y"`}, {"", "列", nil, "列"},
+			{"a b", "c`d", nil, `"a b"."c` + "`" + `d"`, ""}, {"", `x"y`, nil, `"x""y"`, ""}, {"", "列", nil, "列", ""},
 		}},
-		{in: ".1", want: []Selector{{"", "1", nil, "1"}}},
+		{in: ".1", want: []Selector{{"", "1", nil, "1", ""}}},
 		{in: ".a[0], .t.b[ -1 ][2]", want: []Selector{
-			{"", "a", []step{{index: 0}}, "a[0]"}, {"t", "b", []step{{index: -1}, {index: 2}}, "t.b[-1][2]"},
+			{"", "a", []step{{index: 0}}, "a[0]", ""}, {"t", "b", []step{{index: -1}, {index: 2}}, "t.b[-1][2]", ""},
 		}},
 		{in: `.j["a"][ "b\"c\u00e9<" ][1]`, want: []Selector{
-			{"", "j", []step{{key: "a", member: true}, {key: `b"cé<`, member: true}, {index: 1}}, `j["a"]["b\"cé<"][1]`},
+			{"", "j", []step{{key: "a", member: true}, {key: `b"cé<`, member: true}, {index: 1}},
+				`j["a"]["b\"cé<"][1]`, ""},
 		}},
+		{in: `.a AS x, .t.b as "B b", .c[0]As` + "`c``0`" + `,.d as as,.as aS As`, want: []Selector{
+			{"", "a", nil, "a", "x"}, {"t", "b", nil, "t.b", "B b"}, {"", "c", []step{{index: 0}}, "c[0]", "c`0"},
+			{"", "d", nil, "d", "as"}, {"", "as", nil, "as", "As"},
+		}},
+		{in: ".a ASx", err: true},
+		{in: ".a AS", err: true},
+		{in: ".a AS ,.b", err: true},
+		{in: `.a AS ""`, err: true},
+		{in: ".a AS x y", err: true},
+		{in: ".a AS x[0]", err: true},
+		{in: ".a AS x.y", err: true},
 		{in: "", err: true},
 		{in: "a", err: true},
 		{in: ".a,", err: true},

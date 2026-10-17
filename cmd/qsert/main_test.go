@@ -201,6 +201,11 @@ func TestRunSelect(t *testing.T) {
 			want:    "db.users.1,logs.nope\nNULL,NULL\nDave,NULL\n",
 			wantErr: "qsert: warning: no table has the column .logs.nope\n",
 		},
+		{
+			sel:     `.users.id AS user_id, .name as "Full, Name", .id AS id, .nope AS x`,
+			want:    "user_id,\"Full, Name\",id,x\n1,Alice,1,NULL\n2,Bob,2,NULL\nNULL,NULL,10,NULL\n3,Carol,3,NULL\n",
+			wantErr: "qsert: warning: no table has the column .nope\n",
+		},
 	}
 	for _, tt := range tests {
 		out, errOut, status := runQsert(t, input, "-null", "NULL", "-e", tt.sel)

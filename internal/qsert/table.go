@@ -118,7 +118,7 @@ func (c *Collector) WriteSelected(w io.Writer, sels []Selector) error {
 	cw := newCSVWriter(w)
 	header := make([]string, len(sels))
 	for i, s := range sels {
-		header[i] = s.header
+		header[i] = s.Header()
 	}
 	cw.write(header)
 	for _, r := range c.rows {

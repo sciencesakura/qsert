@@ -79,6 +79,7 @@ qsert reads the given files, or the standard input if no file or `-` is given, a
 | `."column name"`                    | A column whose name needs quoting.                                                  |
 | `.column[0]`, `.column[-1]`         | An element of an array, list, set or tuple (0-based; negative counts from the end). |
 | `.column["key"]`                    | A member of a JSON object, or of a map or user-defined type.                        |
+| `.column as name`                   | Assign an alias to a column.                                                        |
 
 Selectors can be chained, as in `.column["items"][0]["id"]`. A selector that matches nothing outputs NULL.
 

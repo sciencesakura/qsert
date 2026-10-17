@@ -26,6 +26,8 @@ With -e, a single CSV of the selected columns is output instead, such as
 where .column selects the column of any table, and .table.column (or .db.table.column)
 selects the column of the table. The rows of the tables matched by any selector are
 output in the input order, and the columns that the table of a row does not have are NULL.
+The header of a column is the selector without the leading dot, or the name given by AS
+such as .users.email AS mail or .name AS "Full Name".
 An element of an array (ARRAY[...], '{...}' with -dbms postgres, [...] with -dbms spanner,
 or a list, set or tuple with -dbms cassandra) is selected by 0-based indices such as
 .column[0] or .column[-1][2], and is NULL if it does not exist. The elements of a set are
@@ -106,7 +108,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if sels != nil {
 		write = func(w io.Writer) error { return c.WriteSelected(w, sels) }
 		for _, s := range c.Unmatched(sels) {
-			fmt.Fprintf(stderr, "qsert: warning: no table has the column .%s\n", s.Header())
+			fmt.Fprintf(stderr, "qsert: warning: no table has the column .%s\n", s.Text())
 		}
 	}
 	if err := write(stdout); err != nil {

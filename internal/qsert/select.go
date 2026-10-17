@@ -9,21 +9,30 @@ import (
 	"unicode/utf8"
 )
 
-// Selector selects a column by -e, such as .column, .table.column, .column[0] or .column["name"].
+// Selector selects a column by -e, such as .column, .table.column, .column[0], .column["name"] or .column AS name.
 type Selector struct {
 	table  string // lower-cased qualified table name, or "" for any table
 	column string // lower-cased column name
 	path   []step // path to an element of an array or JSON
-	header string // header of the output column: the selector without the leading dot
+	text   string // the selector without the leading dot and the alias
+	alias  string // the name given by AS, or "" if none
 }
 
-// Header returns the header of the output column, which is the selector without the leading dot.
-func (s Selector) Header() string { return s.header }
+// Text returns the selector without the leading dot and the alias.
+func (s Selector) Text() string { return s.text }
+
+// Header returns the header of the output column, which is the alias if given, or the text of the selector.
+func (s Selector) Header() string {
+	if s.alias != "" {
+		return s.alias
+	}
+	return s.text
+}
 
 // ParseSelectors parses a comma-separated list of selectors. A selector is a sequence of names each preceded by a
 // dot, whose last name is a column and the others are a (qualified) table, optionally followed by a path to an
-// element such as [0][-1]["name"]. A name can be quoted with " or `, in which the quote is escaped by doubling it.
-// A member name of JSON is a JSON string literal.
+// element such as [0][-1]["name"] and by AS and an alias, which is the header of the output column. A name can be
+// quoted with " or `, in which the quote is escaped by doubling it. A member name of JSON is a JSON string literal.
 func ParseSelectors(s string) ([]Selector, error) {
 	var sels []Selector
 	p := &selectorParser{s: s}
@@ -49,13 +58,30 @@ func ParseSelectors(s string) ([]Selector, error) {
 			}
 			path = append(path, s)
 		}
-		sels = append(sels, newSelector(names, path))
+		sel := newSelector(names, path)
 		p.skipSpace()
+		hasAlias := p.keyword("AS")
+		if hasAlias {
+			p.skipSpace()
+			alias, err := p.name()
+			if err != nil {
+				return nil, err
+			}
+			if alias == "" {
+				return nil, p.errorf("empty alias")
+			}
+			sel.alias = alias
+			p.skipSpace()
+		}
+		sels = append(sels, sel)
 		if p.pos == len(p.s) {
 			return sels, nil
 		}
 		if p.peek() != ',' {
-			return nil, p.errorf("expected ',', '.' or '['")
+			if hasAlias {
+				return nil, p.errorf("expected ','")
+			}
+			return nil, p.errorf("expected ',', '.', '[' or AS")
 		}
 		p.pos++
 	}
@@ -69,9 +95,9 @@ func newSelector(names []string, path []step) Selector {
 			headers[i] = `"` + strings.ReplaceAll(n, `"`, `""`) + `"`
 		}
 	}
-	header := strings.Join(headers, ".")
+	text := strings.Join(headers, ".")
 	for _, s := range path {
-		header += s.String()
+		text += s.String()
 	}
 	column := names[len(names)-1]
 	table := names[:len(names)-1]
@@ -79,8 +105,21 @@ func newSelector(names []string, path []step) Selector {
 		table:  strings.ToLower(strings.Join(table, ".")),
 		column: strings.ToLower(column),
 		path:   path,
-		header: header,
+		text:   text,
 	}
+}
+
+// keyword consumes a case-insensitive keyword that is not followed by a name character.
+func (p *selectorParser) keyword(kw string) bool {
+	end := p.pos + len(kw)
+	if end > len(p.s) || !strings.EqualFold(p.s[p.pos:end], kw) {
+		return false
+	}
+	if r, _ := utf8.DecodeRuneInString(p.s[end:]); end < len(p.s) && isNameRune(r) {
+		return false
+	}
+	p.pos = end
+	return true
 }
 
 // step parses an index or a member name in brackets such as [0], [-1] or ["name"].
