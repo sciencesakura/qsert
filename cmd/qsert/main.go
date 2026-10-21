@@ -28,8 +28,8 @@ selects the column of the table. The rows of the tables matched by any selector 
 output in the input order, and the columns that the table of a row does not have are NULL.
 The header of a column is the selector without the leading dot, or the name given by AS
 such as .users.email AS mail or .name AS "Full Name".
-An element of an array (ARRAY[...], '{...}' with -dbms postgres, [...] with -dbms spanner,
-or a list, set or tuple with -dbms cassandra) is selected by 0-based indices such as
+An element of an array (ARRAY[...], '{...}' with -dialect postgres, [...] with -dialect spanner,
+or a list, set or tuple with -dialect cassandra) is selected by 0-based indices such as
 .column[0] or .column[-1][2], and is NULL if it does not exist. The elements of a set are
 in the order that Cassandra stores them.
 A member of JSON (a string literal, possibly cast to JSON or JSONB, a JSON literal such as
@@ -39,11 +39,11 @@ or .column["items"][0]["id"]. A JSON string is output as its content, an object 
 in a string as JSON, an object or an array built by a function or a literal as the
 expression, and null as NULL.
 
-SQL is tokenized and expressions in values are evaluated according to the DBMS given
-by -dbms. If an expression cannot be evaluated, for example because it contains an
+SQL is tokenized and expressions in values are evaluated according to the dialect given
+by -dialect. If an expression cannot be evaluated, for example because it contains an
 unsupported function or operator or its result depends on the configuration of the
 DBMS, the expression itself is output with comments removed and whitespace normalized.
-With -dbms iso, only what standard SQL defines is evaluated.
+With -dialect iso, only what standard SQL defines is evaluated.
 
 Options:
 `
@@ -56,13 +56,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("qsert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var d qsert.Dialect
-	fs.Func("dbms", "SQL dialect: "+strings.Join(qsert.DialectNames[:], ", ")+" (default iso)", func(s string) error {
+	parseDialect := func(s string) error {
 		var ok bool
 		if d, ok = qsert.ParseDialect(s); !ok {
-			return fmt.Errorf("unknown DBMS %q", s)
+			return fmt.Errorf("unknown dialect %q", s)
 		}
 		return nil
-	})
+	}
+	fs.Func("dialect", "SQL dialect `name`: "+strings.Join(qsert.DialectNames[:], ", ")+" (default iso)", parseDialect)
+	fs.Func("i", "shorthand for -dialect `name`", parseDialect)
 	var sels []qsert.Selector
 	fs.Func("e", "comma-separated `selectors` of the columns to output, such as '.column, .table.column'",
 		func(s string) (err error) {
@@ -71,7 +73,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		})
 	null := fs.String("null", "", "text to output for NULL")
 	noBackslash := fs.Bool("no-backslash-escapes", false,
-		"with -dbms mysql, treat backslashes in string literals as ordinary characters (NO_BACKSLASH_ESCAPES)")
+		"with -dialect mysql, treat backslashes in string literals as ordinary characters (NO_BACKSLASH_ESCAPES)")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), usage)
 		fs.PrintDefaults()

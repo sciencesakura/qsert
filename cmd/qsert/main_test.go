@@ -26,13 +26,13 @@ func checkRun(t *testing.T, input, want string, args ...string) {
 }
 
 // selectValue inserts a value into the column v, and returns the record of the values selected from it.
-func selectValue(t *testing.T, dbms, value, sel string) string {
+func selectValue(t *testing.T, dialect, value, sel string) string {
 	t.Helper()
-	out, errOut, status := runQsert(t, "INSERT INTO t (v) VALUES ("+value+");", "-dbms", dbms, "-null", "NULL",
+	out, errOut, status := runQsert(t, "INSERT INTO t (v) VALUES ("+value+");", "-dialect", dialect, "-null", "NULL",
 		"-e", sel)
 	lines := strings.Split(out, "\n")
 	if status != 0 || errOut != "" || len(lines) != 3 {
-		t.Errorf("%s %s %s: status = %d, stderr = %q, stdout = %q", dbms, value, sel, status, errOut, out)
+		t.Errorf("%s %s %s: status = %d, stderr = %q, stdout = %q", dialect, value, sel, status, errOut, out)
 		return ""
 	}
 	return lines[1]
@@ -74,13 +74,13 @@ func TestRun(t *testing.T) {
 		{
 			name:  "MySQL backslash escapes",
 			input: `INSERT INTO t (a, b) VALUES ('it\'s', "C:\\path");`,
-			args:  []string{"-dbms", "mysql"},
+			args:  []string{"-dialect", "mysql"},
 			want:  "a,b\nit's,C:\\path\n",
 		},
 		{
 			name:  "MySQL NO_BACKSLASH_ESCAPES",
 			input: `INSERT INTO t (a) VALUES ('C:\path\n');`,
-			args:  []string{"-dbms", "MySQL", "-no-backslash-escapes"},
+			args:  []string{"-dialect", "MySQL", "-no-backslash-escapes"},
 			want:  "a\nC:\\path\\n\n",
 		},
 		{
@@ -91,25 +91,25 @@ func TestRun(t *testing.T) {
 				"  AS new ON DUPLICATE KEY UPDATE a = new.a;\n" +
 				"REPLACE DELAYED t SET a = 3, `b` := 'x';\n" +
 				"UNLOCK TABLES;",
-			args: []string{"-dbms", "mysql"},
+			args: []string{"-dialect", "mysql"},
 			want: "a\n1\n2\n\na,b\n3,x\n",
 		},
 		{
 			name:  "PostgreSQL syntax",
 			input: `INSERT INTO "s"."t" AS x ("a", b) VALUES ($$it's$$, E'\t') RETURNING *;`,
-			args:  []string{"-dbms", "postgres"},
+			args:  []string{"-dialect", "postgres"},
 			want:  "a,b\nit's,\"\t\"\n",
 		},
 		{
 			name:  "SQLite syntax",
 			input: "INSERT OR REPLACE INTO [u] ([b], `c`) VALUES (0x10, 1.0)",
-			args:  []string{"-dbms", "sqlite"},
+			args:  []string{"-dialect", "sqlite"},
 			want:  "b,c\n16,1.0\n",
 		},
 		{
 			name:  "SQL Server syntax",
 			input: "INSERT INTO [dbo].[t] ([a]) VALUES (N'x' + N'y')",
-			args:  []string{"-dbms", "mssql"},
+			args:  []string{"-dialect", "mssql"},
 			want:  "a\nxy\n",
 		},
 		{
@@ -122,7 +122,7 @@ func TestRun(t *testing.T) {
 				"GRANT SELECT, INSERT ON t TO u INSERT INTO t (a) VALUES (4)\n" +
 				"CREATE TRIGGER tr ON t AFTER INSERT AS INSERT INTO log VALUES (0)\nGO\n" +
 				"INSERT t (a) VALUES (5) PRINT 1",
-			args: []string{"-dbms", "mssql"},
+			args: []string{"-dialect", "mssql"},
 			want: "a\n1\n2\n3\n4\n5\n",
 		},
 		{
@@ -131,7 +131,7 @@ func TestRun(t *testing.T) {
 				"CREATE TRIGGER tr AFTER INSERT ON t FOR EACH ROW BEGIN INSERT INTO log VALUES (NEW.id); END;;\n" +
 				"DELIMITER ;\n" +
 				"INSERT INTO t VALUES (1);",
-			args: []string{"-dbms", "mysql"},
+			args: []string{"-dialect", "mysql"},
 			want: "1\n1\n",
 		},
 		{
@@ -172,11 +172,15 @@ func TestRunErrors(t *testing.T) {
 	}
 }
 
-func TestRunUnknownDBMS(t *testing.T) {
-	_, errOut, status := runQsert(t, "", "-dbms", "db2")
-	if status != 2 || !strings.Contains(errOut, `unknown DBMS "db2"`) {
+func TestRunUnknownDialect(t *testing.T) {
+	_, errOut, status := runQsert(t, "", "-dialect", "db2")
+	if status != 2 || !strings.Contains(errOut, `unknown dialect "db2"`) {
 		t.Errorf("status = %d, stderr = %q", status, errOut)
 	}
+}
+
+func TestRunDialectShorthand(t *testing.T) {
+	checkRun(t, `INSERT INTO t (s) VALUES ('a\'b');`, "s\na'b\n", "-i", "mysql")
 }
 
 func TestRunSelect(t *testing.T) {
@@ -230,11 +234,11 @@ func TestRunSelectArray(t *testing.T) {
 		`  (4, '{"a":1}'::jsonb, ARRAY[]::int[]),` + "\n" +
 		"  (5, NULL, 7);\n"
 	tests := []struct {
-		dbms, sel, want string
+		dialect, sel, want string
 	}{
 		{
-			dbms: "postgres",
-			sel:  ".id, .tags",
+			dialect: "postgres",
+			sel:     ".id, .tags",
 			want: "id,tags\n" +
 				"1,\"ARRAY['a', 'b' || 'c', NULL, NOW()]\"\n" +
 				"2,\"{x, \"\"y z\"\", NULL, \\{w}\"\n" +
@@ -243,8 +247,8 @@ func TestRunSelectArray(t *testing.T) {
 				"5,NULL\n",
 		},
 		{
-			dbms: "postgres",
-			sel:  ".tags[0], .tags[1], .tags[2], .tags[-1], .tags[9], .m[1][1], .m[-1], .id[0]",
+			dialect: "postgres",
+			sel:     ".tags[0], .tags[1], .tags[2], .tags[-1], .tags[9], .m[1][1], .m[-1], .id[0]",
 			want: "tags[0],tags[1],tags[2],tags[-1],tags[9],m[1][1],m[-1],id[0]\n" +
 				"a,bc,NULL,NOW(),NULL,5,\"[3, 4 + 1]\",NULL\n" +
 				"x,y z,NULL,{w,NULL,4,\"{3,4}\",NULL\n" +
@@ -254,19 +258,19 @@ func TestRunSelectArray(t *testing.T) {
 		},
 		{
 			// '{...}' is a string in standard SQL.
-			dbms: "iso",
-			sel:  ".tags[1], .m[1][0]",
-			want: "tags[1],m[1][0]\nbc,3\nNULL,NULL\n2,NULL\nNULL,NULL\nNULL,NULL\n",
+			dialect: "iso",
+			sel:     ".tags[1], .m[1][0]",
+			want:    "tags[1],m[1][0]\nbc,3\nNULL,NULL\n2,NULL\nNULL,NULL\nNULL,NULL\n",
 		},
 		{
 			// MySQL has no array types.
-			dbms: "mysql",
-			sel:  ".tags[0]",
-			want: "tags[0]\nNULL\nNULL\nNULL\nNULL\nNULL\n",
+			dialect: "mysql",
+			sel:     ".tags[0]",
+			want:    "tags[0]\nNULL\nNULL\nNULL\nNULL\nNULL\n",
 		},
 	}
 	for _, tt := range tests {
-		checkRun(t, input, tt.want, "-dbms", tt.dbms, "-null", "NULL", "-e", tt.sel)
+		checkRun(t, input, tt.want, "-dialect", tt.dialect, "-null", "NULL", "-e", tt.sel)
 	}
 }
 
@@ -280,11 +284,11 @@ func TestRunSelectJSON(t *testing.T) {
 		"  (5, NULL),\n" +
 		`  (6, '{"name": ' || '"carol"}');` + "\n"
 	tests := []struct {
-		dbms, sel, want string
+		dialect, sel, want string
 	}{
 		{
-			dbms: "iso",
-			sel:  `.id, .doc["name"], .doc["tags"][1], .doc["tags"][-2], .doc["addr"], .doc["addr"]["city"]`,
+			dialect: "iso",
+			sel:     `.id, .doc["name"], .doc["tags"][1], .doc["tags"][-2], .doc["addr"], .doc["addr"]["city"]`,
 			want: `id,"doc[""name""]","doc[""tags""][1]","doc[""tags""][-2]","doc[""addr""]","doc[""addr""][""city""]"` +
 				"\n" +
 				"1,Alice,y,x,\"{\"\"zip\"\": \"\"100\"\" , \"\"city\"\": null}\",NULL\n" +
@@ -295,8 +299,8 @@ func TestRunSelectJSON(t *testing.T) {
 				"6,carol,NULL,NULL,NULL,NULL\n",
 		},
 		{
-			dbms: "iso",
-			sel:  `.doc["n"], .doc["ok"], .doc["a b"][0]["id"], .doc[2], .doc["tags"]["x"], .id["x"]`,
+			dialect: "iso",
+			sel:     `.doc["n"], .doc["ok"], .doc["a b"][0]["id"], .doc[2], .doc["tags"]["x"], .id["x"]`,
 			want: `"doc[""n""]","doc[""ok""]","doc[""a b""][0][""id""]",doc[2],"doc[""tags""][""x""]","id[""x""]"` +
 				"\n" +
 				"1.50,true,NULL,NULL,NULL,NULL\n" +
@@ -308,14 +312,14 @@ func TestRunSelectJSON(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		checkRun(t, input, tt.want, "-dbms", tt.dbms, "-null", "NULL", "-e", tt.sel)
+		checkRun(t, input, tt.want, "-dialect", tt.dialect, "-null", "NULL", "-e", tt.sel)
 	}
 
 	// The member of duplicate names is the last one in MySQL and PostgreSQL, the first one in SQLite and SQL Server,
 	// and undefined in the others.
-	for dbms, want := range map[string]string{"mysql": "2", "postgres": "2", "sqlite": "1", "mssql": "1", "iso": "NULL"} {
-		if got := selectValue(t, dbms, `'{"a": 1, "a": 2}'`, `.v["a"]`); got != want {
-			t.Errorf("duplicate names with %s = %q, want %q", dbms, got, want)
+	for dialect, want := range map[string]string{"mysql": "2", "postgres": "2", "sqlite": "1", "mssql": "1", "iso": "NULL"} {
+		if got := selectValue(t, dialect, `'{"a": 1, "a": 2}'`, `.v["a"]`); got != want {
+			t.Errorf("duplicate names with %s = %q, want %q", dialect, got, want)
 		}
 	}
 
@@ -326,13 +330,13 @@ func TestRunSelectJSON(t *testing.T) {
 		`'{"{\"k\": 4}", NULL}'::jsonb[]);` + "\n"
 	checkRun(t, pg, `a,"a[""k""][1][""v""]","b[""k""]","c[1][""k""]","d[0][""k""]","d[1][""k""]"`+"\n"+
 		`"'{""k"": [1, {""v"": ""w""}]}'::jsonb",w,NULL,3,4,NULL`+"\n",
-		"-dbms", "postgres", "-null", "NULL", "-e", `.a, .a["k"][1]["v"], .b["k"], .c[1]["k"], .d[0]["k"], .d[1]["k"]`)
+		"-dialect", "postgres", "-null", "NULL", "-e", `.a, .a["k"][1]["v"], .b["k"], .c[1]["k"], .d[0]["k"], .d[1]["k"]`)
 }
 
 // The expected values of PostgreSQL and SQLite were confirmed with PostgreSQL 17 and SQLite 3.53.
 func TestRunSelectJSONConstructor(t *testing.T) {
 	tests := []struct {
-		dbms, value, sel, want string
+		dialect, value, sel, want string
 	}{
 		// PostgreSQL
 		{
@@ -399,8 +403,8 @@ func TestRunSelectJSONConstructor(t *testing.T) {
 		{"iso", `JSON_OBJECT('a': '', 'b': JSON_ARRAY('[1]' FORMAT JSON))`, `.v["a"], .v["b"][0][0]`, ",1"},
 	}
 	for _, tt := range tests {
-		if got := selectValue(t, tt.dbms, tt.value, tt.sel); got != tt.want {
-			t.Errorf("%s %s %s = %q, want %q", tt.dbms, tt.value, tt.sel, got, tt.want)
+		if got := selectValue(t, tt.dialect, tt.value, tt.sel); got != tt.want {
+			t.Errorf("%s %s %s = %q, want %q", tt.dialect, tt.value, tt.sel, got, tt.want)
 		}
 	}
 }
@@ -449,7 +453,7 @@ func TestRunCassandra(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		checkRun(t, input, tt.want, "-dbms", "cassandra", "-null", "NULL", "-e", tt.sel)
+		checkRun(t, input, tt.want, "-dialect", "cassandra", "-null", "NULL", "-e", tt.sel)
 	}
 }
 
@@ -469,13 +473,13 @@ func TestRunSpanner(t *testing.T) {
 		"2,raw\\n,NULL,[CAST(1 AS FLOAT64)]\n"+
 		"3,abc,,\n"+
 		"4,,,\n",
-		"-dbms", "spanner", "-null", "NULL", "-e", ".K, .S, .AS1, .AF")
+		"-dialect", "spanner", "-null", "NULL", "-e", ".K, .S, .AS1, .AF")
 	// The first of the duplicate names of a JSON object is selected.
 	checkRun(t, input, `"J[""a""]","J[""b""][1]","J[""b""][2][""c""]",J[1],"J[""k""][1]",A[0],AS1[1],AS1[2],AF[0],AF[1]`+"\n"+
 		"x,2.5,true,NULL,NULL,3,NULL,tri'ple,0.30000000000000004,1e+20\n"+
 		"NULL,NULL,NULL,100.0,NULL,NULL,NULL,NULL,CAST(1 AS FLOAT64),NULL\n"+
 		"NULL,NULL,NULL,NULL,2,NULL,NULL,NULL,NULL,NULL\n"+
 		"NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL\n",
-		"-dbms", "spanner", "-null", "NULL", "-e",
+		"-dialect", "spanner", "-null", "NULL", "-e",
 		`.J["a"], .J["b"][1], .J["b"][2]["c"], .J[1], .J["k"][1], .A[0], .AS1[1], .AS1[2], .AF[0], .AF[1]`)
 }

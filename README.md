@@ -29,7 +29,7 @@ insert into orders (id, user_id, total) values (10, 1, 19.99 * 2), (11, 2, now()
 Convert every table to CSV. Tables are separated by an empty line:
 
 ```console
-$ qsert -dbms mysql dump.sql
+$ qsert -dialect mysql dump.sql
 id,name,profile
 1,Alice,"{""age"": 30, ""tags"": [""admin"", ""dev""]}"
 2,Bob,"json_object('age', 25, 'tags', json_array('dev'))"
@@ -45,7 +45,7 @@ id,user_id,total
 Select columns, JSON members and array elements:
 
 ```console
-$ qsert -dbms mysql -e '.users.id, .name, .profile["age"], .profile["tags"][0]' dump.sql
+$ qsert -dialect mysql -e '.users.id, .name, .profile["age"], .profile["tags"][0]' dump.sql
 users.id,name,"profile[""age""]","profile[""tags""][0]"
 1,Alice,30,admin
 2,Bob,25,dev
@@ -62,13 +62,13 @@ qsert reads the given files, or the standard input if no file or `-` is given, a
 
 ### Options
 
-| Option                  | Description                                                                                               |
-|-------------------------|-----------------------------------------------------------------------------------------------------------|
-| `-dbms name`            | SQL dialect: `iso` (default), `postgres`, `mysql`, `sqlite`, `oracle`, `mssql`, `cassandra`, `spanner`.   |
-| `-e selectors`          | Comma-separated selectors of the columns to output, such as `'.id, .users.email, .tags[0], .doc["key"]'`. |
-| `-null text`            | Text to output for NULL (default: empty).                                                                 |
-| `-no-backslash-escapes` | With `-dbms mysql`, treat backslashes in string literals as ordinary characters (`NO_BACKSLASH_ESCAPES`). |
-| `-h`                    | Show the help.                                                                                            |
+| Option                       | Description                                                                                                  |
+|------------------------------|--------------------------------------------------------------------------------------------------------------|
+| `-dialect name`, `-i name`   | SQL dialect: `iso` (default), `postgres`, `mysql`, `sqlite`, `oracle`, `mssql`, `cassandra`, `spanner`.      |
+| `-e selectors`               | Comma-separated selectors of the columns to output, such as `'.id, .users.email, .tags[0], .doc["key"]'`.    |
+| `-null text`                 | Text to output for NULL (default: empty).                                                                    |
+| `-no-backslash-escapes`      | With `-dialect mysql`, treat backslashes in string literals as ordinary characters (`NO_BACKSLASH_ESCAPES`). |
+| `-h`                         | Show the help.                                                                                               |
 
 ### Selectors
 
