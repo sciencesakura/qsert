@@ -45,8 +45,8 @@ id,user_id,total
 Select columns, JSON members and array elements:
 
 ```console
-$ qsert -dialect mysql -e '.users.id, .name, .profile["age"], .profile["tags"][0]' dump.sql
-users.id,name,"profile[""age""]","profile[""tags""][0]"
+$ qsert -dialect mysql -e '.users.id, .name, .profile[age], .profile[tags][0]' dump.sql
+users.id,name,profile[age],profile[tags][0]
 1,Alice,30,admin
 2,Bob,25,dev
 3,Carol,,
@@ -65,7 +65,7 @@ qsert reads the given files, or the standard input if no file or `-` is given, a
 | Option                       | Description                                                                                                  |
 |------------------------------|--------------------------------------------------------------------------------------------------------------|
 | `-dialect name`, `-i name`   | SQL dialect: `iso` (default), `postgres`, `mysql`, `sqlite`, `oracle`, `mssql`, `cassandra`, `spanner`.      |
-| `-e selectors`               | Comma-separated selectors of the columns to output, such as `'.id, .users.email, .tags[0], .doc["key"]'`.    |
+| `-e selectors`               | Comma-separated selectors of the columns to output, such as `'.id, .users.email, .tags[0], .doc[key]'`.      |
 | `-null text`                 | Text to output for NULL (default: empty).                                                                    |
 | `-no-backslash-escapes`      | With `-dialect mysql`, treat backslashes in string literals as ordinary characters (`NO_BACKSLASH_ESCAPES`). |
 | `-h`                         | Show the help.                                                                                               |
@@ -78,10 +78,14 @@ qsert reads the given files, or the standard input if no file or `-` is given, a
 | `.table.column`, `.db.table.column` | The qualified column name.                                                          |
 | `."column name"`                    | A column whose name needs quoting.                                                  |
 | `.column[0]`, `.column[-1]`         | An element of an array, list, set or tuple (0-based; negative counts from the end). |
-| `.column["key"]`                    | A member of a JSON object, or of a map or user-defined type.                        |
+| `.column[key]`, `.column["key"]`    | A member of a JSON object, or of a map or user-defined type.                        |
 | `.column as name`                   | Assign an alias to a column.                                                        |
 
-Selectors can be chained, as in `.column["items"][0]["id"]`. A selector that matches nothing outputs NULL.
+Selectors can be chained, as in `.column[items][0][id]`. A selector that matches nothing outputs NULL.
+
+A key in brackets is the text without the surrounding spaces, as in `.column[first name]`. Quote it as a JSON string
+if it contains `]`, starts with `"` or has surrounding spaces, as in `.column["a]b"]`. An integer selects an element
+of an array, or the member of that name of an object, such as the key `1` of a `map<int, text>`.
 
 ### Exit status
 

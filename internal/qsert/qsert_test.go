@@ -497,14 +497,29 @@ func TestParseSelectors(t *testing.T) {
 		}},
 		{in: ".1", want: []Selector{{"", "1", nil, "1", ""}}},
 		{in: ".a[0], .t.b[ -1 ][2]", want: []Selector{
-			{"", "a", []step{{index: 0}}, "a[0]", ""}, {"t", "b", []step{{index: -1}, {index: 2}}, "t.b[-1][2]", ""},
+			{"", "a", []step{{"0", 0, true}}, "a[0]", ""},
+			{"t", "b", []step{{"-1", -1, true}, {"2", 2, true}}, "t.b[-1][2]", ""},
 		}},
 		{in: `.j["a"][ "b\"c\u00e9<" ][1]`, want: []Selector{
-			{"", "j", []step{{key: "a", member: true}, {key: `b"cé<`, member: true}, {index: 1}},
-				`j["a"]["b\"cé<"][1]`, ""},
+			{"", "j", []step{{"a", 0, false}, {`b"cé<`, 0, false}, {"1", 1, true}}, `j[a][b"cé<][1]`, ""},
+		}},
+		{in: `.j[a][ prop  name ][é"x][ 'y' ][-][01][1e3][+1][-0]`, want: []Selector{
+			{"", "j", []step{
+				{"a", 0, false}, {"prop  name", 0, false}, {`é"x`, 0, false}, {"'y'", 0, false}, {"-", 0, false},
+				{"01", 1, true}, {"1e3", 0, false}, {"+1", 0, false}, {"-0", 0, true},
+			}, `j[a][prop  name][é"x]['y'][-][01][1e3][+1][-0]`, ""},
+		}},
+		{in: `.j["0"][a,b][[x][" a"][""]["]"]["\"x"]`, want: []Selector{
+			{"", "j", []step{
+				{"0", 0, true}, {"a,b", 0, false}, {"[x", 0, false}, {" a", 0, false}, {"", 0, false},
+				{"]", 0, false}, {`"x`, 0, false},
+			}, `j[0][a,b][[x][" a"][""]["]"]["\"x"]`, ""},
+		}},
+		{in: ".j[99999999999999999999]", want: []Selector{
+			{"", "j", []step{{"99999999999999999999", 0, false}}, "j[99999999999999999999]", ""},
 		}},
 		{in: `.a AS x, .t.b as "B b", .c[0]As` + "`c``0`" + `,.d as as,.as aS As`, want: []Selector{
-			{"", "a", nil, "a", "x"}, {"t", "b", nil, "t.b", "B b"}, {"", "c", []step{{index: 0}}, "c[0]", "c`0"},
+			{"", "a", nil, "a", "x"}, {"t", "b", nil, "t.b", "B b"}, {"", "c", []step{{"0", 0, true}}, "c[0]", "c`0"},
 			{"", "d", nil, "d", "as"}, {"", "as", nil, "as", "As"},
 		}},
 		{in: ".a ASx", err: true},
@@ -521,12 +536,14 @@ func TestParseSelectors(t *testing.T) {
 		{in: ".", err: true},
 		{in: `."a`, err: true},
 		{in: ".a[", err: true},
-		{in: ".a[x]", err: true},
+		{in: ".a[]", err: true},
+		{in: ".a[ ]", err: true},
 		{in: ".a[1", err: true},
+		{in: ".a[x, .b", err: true},
 		{in: ".a[0].b", err: true},
 		{in: `.a["x]`, err: true},
+		{in: `.a["x"y]`, err: true},
 		{in: `.a["\q"]`, err: true},
-		{in: `.a['x']`, err: true},
 	}
 	for _, tt := range tests {
 		got, err := ParseSelectors(tt.in)

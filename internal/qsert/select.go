@@ -31,8 +31,9 @@ func (s Selector) Header() string {
 
 // ParseSelectors parses a comma-separated list of selectors. A selector is a sequence of names each preceded by a
 // dot, whose last name is a column and the others are a (qualified) table, optionally followed by a path to an
-// element such as [0][-1]["name"] and by AS and an alias, which is the header of the output column. A name can be
-// quoted with " or `, in which the quote is escaped by doubling it. A member name of JSON is a JSON string literal.
+// element such as [0][-1][name] and by AS and an alias, which is the header of the output column. A name can be
+// quoted with " or `, in which the quote is escaped by doubling it. A member name in brackets can be quoted as a JSON
+// string literal, and an integer selects an array element or the member of that name, according to the value.
 func ParseSelectors(s string) ([]Selector, error) {
 	var sels []Selector
 	p := &selectorParser{s: s}
@@ -122,7 +123,8 @@ func (p *selectorParser) keyword(kw string) bool {
 	return true
 }
 
-// step parses an index or a member name in brackets such as [0], [-1] or ["name"].
+// step parses a member name or an index in brackets such as [name], [0], [-1] or ["name"]. An unquoted name is the
+// text up to ']' without the surrounding spaces.
 func (p *selectorParser) step() (step, error) {
 	p.pos++ // [
 	p.skipSpace()
@@ -139,26 +141,37 @@ func (p *selectorParser) step() (step, error) {
 			p.pos = start
 			return step{}, p.errorf("invalid member name")
 		}
-		s.member = true
+		p.skipSpace()
+		if p.peek() != ']' {
+			return step{}, p.errorf("expected ']'")
+		}
 	} else {
-		if p.peek() == '-' {
-			p.pos++
+		end := strings.IndexByte(p.s[p.pos:], ']')
+		if end < 0 {
+			p.pos = len(p.s)
+			return step{}, p.errorf("expected ']'")
 		}
-		for isDigit(p.peek()) {
-			p.pos++
+		p.pos += end
+		if s.key = strings.TrimRight(p.s[start:p.pos], spaces); s.key == "" {
+			return step{}, p.errorf("expected a member name or an index")
 		}
-		var err error
-		if s.index, err = strconv.Atoi(p.s[start:p.pos]); err != nil {
-			p.pos = start
-			return step{}, p.errorf("expected an integer index or a member name")
-		}
-	}
-	p.skipSpace()
-	if p.peek() != ']' {
-		return step{}, p.errorf("expected ']'")
 	}
 	p.pos++
+	s.index, s.hasIndex = parseIndex(s.key)
 	return s, nil
+}
+
+// parseIndex parses an array index, which is an optionally negative decimal integer.
+func parseIndex(s string) (int, bool) {
+	digits := strings.TrimPrefix(s, "-")
+	if digits == "" || strings.TrimLeft(digits, "0123456789") != "" {
+		return 0, false
+	}
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false
+	}
+	return i, true
 }
 
 type selectorParser struct {
@@ -173,8 +186,10 @@ func (p *selectorParser) peek() byte {
 	return 0
 }
 
+const spaces = " \t\r\n"
+
 func (p *selectorParser) skipSpace() {
-	for p.pos < len(p.s) && strings.IndexByte(" \t\r\n", p.s[p.pos]) >= 0 {
+	for p.pos < len(p.s) && strings.IndexByte(spaces, p.s[p.pos]) >= 0 {
 		p.pos++
 	}
 }
@@ -226,6 +241,11 @@ func isBareName(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// isBareKey reports whether a member name can be written in brackets without quotes.
+func isBareKey(s string) bool {
+	return s != "" && s[0] != '"' && !strings.ContainsRune(s, ']') && strings.Trim(s, spaces) == s
 }
 
 // columnOf returns the index of the column of a table that the selector selects, or -1 if none.

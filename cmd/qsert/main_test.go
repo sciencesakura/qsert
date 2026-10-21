@@ -288,8 +288,8 @@ func TestRunSelectJSON(t *testing.T) {
 	}{
 		{
 			dialect: "iso",
-			sel:     `.id, .doc["name"], .doc["tags"][1], .doc["tags"][-2], .doc["addr"], .doc["addr"]["city"]`,
-			want: `id,"doc[""name""]","doc[""tags""][1]","doc[""tags""][-2]","doc[""addr""]","doc[""addr""][""city""]"` +
+			sel:     `.id, .doc[name], .doc[ tags ][1], .doc[tags][-2], .doc[addr], .doc[addr][city]`,
+			want: `id,doc[name],doc[tags][1],doc[tags][-2],doc[addr],doc[addr][city]` +
 				"\n" +
 				"1,Alice,y,x,\"{\"\"zip\"\": \"\"100\"\" , \"\"city\"\": null}\",NULL\n" +
 				"2,NULL,NULL,NULL,NULL,NULL\n" +
@@ -301,7 +301,7 @@ func TestRunSelectJSON(t *testing.T) {
 		{
 			dialect: "iso",
 			sel:     `.doc["n"], .doc["ok"], .doc["a b"][0]["id"], .doc[2], .doc["tags"]["x"], .id["x"]`,
-			want: `"doc[""n""]","doc[""ok""]","doc[""a b""][0][""id""]",doc[2],"doc[""tags""][""x""]","id[""x""]"` +
+			want: `doc[n],doc[ok],doc[a b][0][id],doc[2],doc[tags][x],id[x]` +
 				"\n" +
 				"1.50,true,NULL,NULL,NULL,NULL\n" +
 				"NULL,NULL,7,NULL,NULL,NULL\n" +
@@ -323,12 +323,28 @@ func TestRunSelectJSON(t *testing.T) {
 		}
 	}
 
+	// An integer selects an element of an array, or the member of that name of an object, whether quoted or not.
+	for _, tt := range []struct{ value, sel, want string }{
+		{`'{"0": "z", "01": "y", "-1": "x"}'`, ".v[0]", "z"},
+		{`'{"0": "z", "01": "y", "-1": "x"}'`, `.v["01"]`, "y"},
+		{`'{"0": "z", "01": "y", "-1": "x"}'`, ".v[-1]", "x"},
+		{`'{"0": "z", "01": "y", "-1": "x"}'`, ".v[1]", "NULL"},
+		{`'[5, 6]'`, ".v[01]", "6"},
+		{`'[5, 6]'`, `.v["-1"]`, "6"},
+		{`'[5, 6]'`, ".v[x]", "NULL"},
+		{`'{"a b": {"c]": 1}}'`, `.v[ a b ]["c]"]`, "1"},
+	} {
+		if got := selectValue(t, "iso", tt.value, tt.sel); got != tt.want {
+			t.Errorf("%s %s = %q, want %q", tt.value, tt.sel, got, tt.want)
+		}
+	}
+
 	pg := "INSERT INTO t (a, b, c, d) VALUES (" +
 		`'{"k": [1, {"v": "w"}]}'::jsonb, ` +
 		`'{"k": 1}'::text, ` +
 		`ARRAY['{"k": 2}'::json, '{"k": 3}'], ` +
 		`'{"{\"k\": 4}", NULL}'::jsonb[]);` + "\n"
-	checkRun(t, pg, `a,"a[""k""][1][""v""]","b[""k""]","c[1][""k""]","d[0][""k""]","d[1][""k""]"`+"\n"+
+	checkRun(t, pg, `a,a[k][1][v],b[k],c[1][k],d[0][k],d[1][k]`+"\n"+
 		`"'{""k"": [1, {""v"": ""w""}]}'::jsonb",w,NULL,3,4,NULL`+"\n",
 		"-dialect", "postgres", "-null", "NULL", "-e", `.a, .a["k"][1]["v"], .b["k"], .c[1]["k"], .d[0]["k"], .d[1]["k"]`)
 }
@@ -438,9 +454,9 @@ func TestRunCassandra(t *testing.T) {
 		{
 			// Sets are sorted without duplicates, and which of the duplicate keys of a map is stored is unknown.
 			sel: `.emails[-1], .tags[0], .tags[-1], .prefs["theme"], .addr["street"], .addr["Zip"], .addr["zip"], ` +
-				`.addr["nested"]["k"][1], .pt[2][0], .si[0], .si[-1], .sb[1], .mi["2"]`,
-			want: `emails[-1],tags[0],tags[-1],"prefs[""theme""]","addr[""street""]","addr[""Zip""]","addr[""zip""]",` +
-				`"addr[""nested""][""k""][1]",pt[2][0],si[0],si[-1],sb[1],"mi[""2""]"` + "\n" +
+				`.addr["nested"]["k"][1], .pt[2][0], .si[0], .si[-1], .sb[1], .mi[2]`,
+			want: `emails[-1],tags[0],tags[-1],prefs[theme],addr[street],addr[Zip],addr[zip],` +
+				`addr[nested][k][1],pt[2][0],si[0],si[-1],sb[1],mi[2]` + "\n" +
 				"b@x.com,B,é,NULL,Main,100,NULL,2,3,-1,3,0x0100,b\n" +
 				"c@x.com,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL\n" +
 				"NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,10,30,NULL,NULL\n" +
@@ -449,7 +465,7 @@ func TestRunCassandra(t *testing.T) {
 		{
 			// The order of UUIDs, and which of 1 and 1e0 is stored, are unknown.
 			sel:  ".su[0], .sd[0], .prefs[\"k\"]",
-			want: "su[0],sd[0],\"prefs[\"\"k\"\"]\"\nNULL,NULL,NULL\nNULL,NULL,v\nNULL,NULL,NULL\nNULL,NULL,NULL\n",
+			want: "su[0],sd[0],prefs[k]\nNULL,NULL,NULL\nNULL,NULL,v\nNULL,NULL,NULL\nNULL,NULL,NULL\n",
 		},
 	}
 	for _, tt := range tests {
@@ -475,7 +491,7 @@ func TestRunSpanner(t *testing.T) {
 		"4,,,\n",
 		"-dialect", "spanner", "-null", "NULL", "-e", ".K, .S, .AS1, .AF")
 	// The first of the duplicate names of a JSON object is selected.
-	checkRun(t, input, `"J[""a""]","J[""b""][1]","J[""b""][2][""c""]",J[1],"J[""k""][1]",A[0],AS1[1],AS1[2],AF[0],AF[1]`+"\n"+
+	checkRun(t, input, `J[a],J[b][1],J[b][2][c],J[1],J[k][1],A[0],AS1[1],AS1[2],AF[0],AF[1]`+"\n"+
 		"x,2.5,true,NULL,NULL,3,NULL,tri'ple,0.30000000000000004,1e+20\n"+
 		"NULL,NULL,NULL,100.0,NULL,NULL,NULL,NULL,CAST(1 AS FLOAT64),NULL\n"+
 		"NULL,NULL,NULL,NULL,2,NULL,NULL,NULL,NULL,NULL\n"+
