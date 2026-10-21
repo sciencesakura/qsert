@@ -34,10 +34,13 @@ or a list, set or tuple with -dialect cassandra) is selected by 0-based indices 
 in the order that Cassandra stores them.
 A member of JSON (a string literal, possibly cast to JSON or JSONB, a JSON literal such as
 JSON '{...}' of GoogleSQL, or built by a function such as JSON_OBJECT and JSON_ARRAY), or of
-a map or a user-defined type of CQL, is selected by its name or key such as .column["name"]
-or .column["items"][0]["id"]. A JSON string is output as its content, an object or an array
-in a string as JSON, an object or an array built by a function or a literal as the
-expression, and null as NULL.
+a map or a user-defined type of CQL, is selected by its name or key such as .column[name]
+or .column[items][0][id]. A name is the text in the brackets without the surrounding spaces,
+or a JSON string such as .column["a]b"], which is required if the name has a ']', starts
+with '"' or has surrounding spaces. An integer selects an element of an array, or the
+member of that name of an object, such as the key 1 of map<int, text>.
+A JSON string is output as its content, an object or an array in a string as JSON, an
+object or an array built by a function or a literal as the expression, and null as NULL.
 
 SQL is tokenized and expressions in values are evaluated according to the dialect given
 by -dialect. If an expression cannot be evaluated, for example because it contains an

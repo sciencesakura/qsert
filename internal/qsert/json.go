@@ -330,17 +330,16 @@ func jsonValue(a argValue) (cell, error) {
 }
 
 // step returns the member of a JSON object, or the element of a JSON array, that a path step selects. It fails if
-// the text is not a JSON object or array respectively, or the member or the element does not exist.
+// the text is neither a JSON object nor an array, or the member or the element does not exist.
 func (j *jsonText) step(s step) (cell, bool) {
 	if !json.Valid([]byte(j.s)) {
 		return cell{}, false
 	}
-	if s.member {
-		raw, ok := j.member(s.key)
-		if !ok {
-			return cell{}, false
-		}
+	if raw, ok := j.member(s.key); ok {
 		return j.cell(raw), true
+	}
+	if !s.hasIndex {
+		return cell{}, false
 	}
 	var a []json.RawMessage
 	if json.Unmarshal([]byte(j.s), &a) != nil || a == nil {

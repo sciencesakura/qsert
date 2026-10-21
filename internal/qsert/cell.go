@@ -1,7 +1,5 @@
 package qsert
 
-import "strconv"
-
 // cell is a value of a column in a row.
 type cell struct {
 	text   string
@@ -57,19 +55,19 @@ func (c *cell) setElements(e cell) {
 	c.array, c.object, c.json = e.array, e.object, e.json
 }
 
-// step is a step of a path into a value: a 0-based index of an array element, where a negative index counts from the
-// end, or a name of a JSON object member.
+// step is a step of a path into a value: a name of an object member or, if the name is an integer, also a 0-based
+// index of an array element, where a negative index counts from the end.
 type step struct {
-	index  int
-	key    string
-	member bool
+	key      string
+	index    int
+	hasIndex bool
 }
 
 func (s step) String() string {
-	if s.member {
-		return "[" + jsonQuote(s.key) + "]"
+	if isBareKey(s.key) {
+		return "[" + s.key + "]"
 	}
-	return "[" + strconv.Itoa(s.index) + "]"
+	return "[" + jsonQuote(s.key) + "]"
 }
 
 // position returns the position of the element that the step selects in an array of length n.
@@ -78,11 +76,11 @@ func (s step) position(n int) (int, bool) {
 	if i < 0 {
 		i += n
 	}
-	return i, !s.member && 0 <= i && i < n
+	return i, s.hasIndex && 0 <= i && i < n
 }
 
 // index returns the element of a cell at a path. It fails if the cell is not an array or JSON, or the element does
-// not exist. An array element is selected by an index, and a JSON object member by a name.
+// not exist. An array element is selected by an integer, and an object member by a name.
 func (c cell) index(path []step) (cell, bool) {
 	for _, s := range path {
 		var ok bool
@@ -95,7 +93,6 @@ func (c cell) index(path []step) (cell, bool) {
 			}
 		case c.object != nil:
 			c, ok = c.object.members[s.key]
-			ok = ok && s.member
 		case c.json != nil:
 			c, ok = c.json.step(s)
 		}
